@@ -1,36 +1,35 @@
 # xyznot Financial Data Skill
 
-## Two Use Cases
-
-### Use Case 1: Historical Data (MCP + HTTP SQL)
-For bulk/pull of **all** historical data — price history, news, fundamentals.
-
-| Interface | URL | Purpose |
-|-----------|-----|---------|
-| **MCP** | `POST /v1/mcp` | Schema discovery: `list_datasets`, `table_schema` |
-| **HTTP SQL** | `POST /v1/sql` | Run SQL queries against full datasets |
-
-**Rule**: NEVER use MCP `sql` tool — it times out. Always use HTTP SQL for data.
-
-### Use Case 2: Specific Data Points (API)
-For targeted lookups — a single ticker's latest price, one company's fundamentals, one article.
-
-*(API endpoint details TBD — to be added once defined)*
+This skill provides two separate interfaces for financial data access.
 
 ---
 
-## Auth
+## Use Case 1: Historical / Bulk Data
 
-All requests: `X-API-Key: a5ff6f5f752c1f04948ba3ce27119ad4202c41f1d52120698ec045b8d25f206e`
+**Purpose**: Pull **all** historical data — full price history, all news articles, complete fundamentals.
+**Endpoints**: MCP for schema discovery, HTTP SQL for queries.
 
----
+| Interface | URL | Role |
+|-----------|-----|------|
+| **MCP** | `POST /v1/mcp` | Discover schema: `list_datasets`, `table_schema` |
+| **HTTP SQL** | `POST /v1/sql` | Run SQL against full datasets (20B+ rows) |
 
-## Use Case 1: Historical Data via MCP + HTTP SQL
+**Auth**: `X-API-Key: a5ff6f5f752c1f04948ba3ce27119ad4202c41f1d52120698ec045b8d25f206e`
 
-### MCP Handshake (Streamable HTTP SSE)
+### Datasets
+
+| Dataset | Rows | Content |
+|---------|------|---------|
+| `rebyte.public.bars_1m` | ~20B | 1-min OHLCV: ticker, t, o, h, l, c, v, n, year, month |
+| `rebyte.public.fundamentals` | ~22K | SEC XBRL filings: tickers(ARRAY), company_name, fiscal_*, filing_date, acceptance_datetime, end_date, is_*(~45), bs_*(~25), cf_*(~10), ci_*(~5) |
+| `rebyte.public.news` | ~800K | Articles: tickers(ARRAY), title, content, published_utc, content_embedding(FixedSizeList(1536)) |
+
+### Workflow
+
+**Step 1: Discover schema via MCP**
 
 ```bash
-# 1. Initialize
+# Initialize
 curl -sS -D /tmp/hdr -X POST https://mcp.xyznot.com/v1/mcp \
   -H "X-API-Key: $KEY" \
   -H "content-type: application/json" \
@@ -38,20 +37,22 @@ curl -sS -D /tmp/hdr -X POST https://mcp.xyznot.com/v1/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"client","version":"1.0"}}}'
 SID=$(grep -i "mcp-session-id" /tmp/hdr | tr -d '\r' | awk '{print $2}')
 
-# 2. Send initialized
+# Complete handshake
 curl -sS -X POST https://mcp.xyznot.com/v1/mcp \
   -H "X-API-Key: $KEY" -H "content-type: application/json" \
-  -H "accept: application/json, text/event-stream" \
-  -H "mcp-session-id: $SID" \
+  -H "accept: application/json, text/event-stream" -H "mcp-session-id: $SID" \
   -d '{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}'
 
-# 3. Discover schema
-curl ... -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"table_schema","arguments":{"tables":["rebyte.public.bars_1m"]}}}'
+# Get schema (always use rebyte.public prefix in MCP calls)
+curl -sS -X POST https://mcp.xyznot.com/v1/mcp \
+  -H "X-API-Key: $KEY" -H "content-type: application/json" \
+  -H "accept: application/json, text/event-stream" -H "mcp-session-id: $SID" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"table_schema","arguments":{"tables":["rebyte.public.bars_1m"]}}}'
 ```
 
-Response is SSE. Extract `data: {"jsonrpc":...}` lines. Get `result.content[0].text` for markdown schema.
+Response is SSE. Extract `data: {"jsonrpc": ...}` lines → `result.content[0].text` is a markdown schema table.
 
-### HTTP SQL Queries
+**Step 2: Query data via HTTP SQL**
 
 ```bash
 curl -s --max-time 60 -X POST https://mcp.xyznot.com/v1/sql \
@@ -61,59 +62,28 @@ curl -s --max-time 60 -X POST https://mcp.xyznot.com/v1/sql \
   --data "SELECT ticker, t, c, v FROM bars_1m ORDER BY t DESC LIMIT 10"
 ```
 
-Table names: bare (`bars_1m`) or fully-qualified (`rebyte.public.bars_1m`).
+Table names work bare (`bars_1m`) or fully-qualified (`rebyte.public.bars_1m`).
 
----
-
-## Datasets
-
-### bars_1m (~20B rows) — 1-min OHLCV Price History
-| Column | Type | Description |
-|--------|------|-------------|
-| ticker | VARCHAR | Stock symbol |
-| t | TIMESTAMP | Bar time (UTC) |
-| o/h/l/c | DOUBLE | Open/High/Low/Close |
-| v | BIGINT | Volume |
-| n | BIGINT | Number of trades |
-| year | VARCHAR | Partition (e.g. '2026') |
-| month | VARCHAR | Partition (e.g. '6') |
-
-### fundamentals (~22K rows) — SEC Filings
-Columns: `tickers` (ARRAY), `company_name`, `fiscal_year`, `fiscal_period`, `filing_date`, `acceptance_datetime`, `end_date`
-Financials: `is_*` (~45 income stmt), `bs_*` (~25 balance sheet), `cf_*` (~10 cash flow), `ci_*` (~5 comp income)
-
-### news (~800K rows) — Financial News
-| Column | Type | Description |
-|--------|------|-------------|
-| tickers | ARRAY(VARCHAR) | Mentioned symbols |
-| published_utc | TIMESTAMP | Publication time |
-| title | VARCHAR | Headline |
-| content | VARCHAR | Full text |
-| content_embedding | FixedSizeList(1536) | Vector embedding |
-
----
-
-## Query Tips
+### Query Tips
 
 - `year`/`month` are VARCHAR: `WHERE year = '2026'`
 - `tickers` is ARRAY: `WHERE ARRAY_CONTAINS(tickers, 'AAPL')`
-- Use `year`/`month` filter for partition pruning
-- `ORDER BY t LIMIT N` is instant (TopK)
-- `COUNT(*)` is instant (metadata)
-- Avoid `WHERE ticker=` without date range — full scan of 20B rows
+- Always add `year`/`month` filter for partition pruning on bars_1m
+- `ORDER BY t LIMIT N`: instant (TopK optimization)
+- `COUNT(*)`: instant (metadata)
+- Avoid `WHERE ticker=` without date range (full scan of 20B rows — will timeout)
+- **NEVER use MCP `sql` tool** — always times out. Use HTTP SQL for all queries.
+
+### Limitations
+
+- No column descriptions (Metadata column empty in MCP table_schema)
+- Column meaning must be inferred from name (o=open, is_*=income statement, bs_*=balance sheet, etc.)
 
 ---
 
-## Typical Workflow
+## Use Case 2: Specific Data Points
 
-1. **Discover schema**: MCP `table_schema` on `rebyte.public.{table}`
-2. **Design SQL**: Map question to query using known columns
-3. **Pull data**: HTTP SQL → JSON file
-4. **Analyze locally**: Python with `json.load()` + statistics
+**Purpose**: Targeted lookups — get the latest price of one ticker, fetch one company's fundamentals, retrieve a single news article.
+**Endpoint**: *(API endpoint TBD — to be added)*
 
----
-
-## Limitations
-
-- No column descriptions (Metadata empty in table_schema)
-- MCP `sql` tool always times out — use HTTP SQL for all data queries
+*(Details will be filled in once the API is defined. This will be a simple REST endpoint for point queries, separate from the bulk SQL interface above.)*

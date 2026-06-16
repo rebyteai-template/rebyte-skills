@@ -1,16 +1,8 @@
 # xyznot Market Data: Specific Data Points
 
-**API**: *(TBD)*
+**API**: `https://api.rebyte.ai/api/data`
 
 Purpose: Targeted lookups — latest price of one ticker, one company's SEC filing, single news article.
-
----
-
-## Interface
-
-| Endpoint | Role |
-|----------|------|
-| `GET /v1/...` (TBD) | Lookup specific data points |
 
 Auth: `X-API-Key: a5ff6f5f752c1f04948ba3ce27119ad4202c41f1d52120698ec045b8d25f206e`
 
@@ -20,21 +12,21 @@ Auth: `X-API-Key: a5ff6f5f752c1f04948ba3ce27119ad4202c41f1d52120698ec045b8d25f20
 
 ### Latest Price
 ```
-GET /v1/price/{ticker}
+POST /api/data
 ```
-Returns: `{ticker, t, o, h, l, c, v}` for the most recent 1-min bar.
+SQL: `SELECT ticker, t, o, h, l, c, v FROM bars_1m WHERE ticker = $1 ORDER BY t DESC LIMIT 1`
 
 ### Company Fundamentals
 ```
-GET /v1/fundamentals/{ticker}
+POST /api/data
 ```
-Returns: latest fiscal period data (income stmt, balance sheet, cash flow).
+SQL: `SELECT * FROM fundamentals WHERE ARRAY_CONTAINS(tickers, $1) ORDER BY acceptance_datetime DESC LIMIT 1`
 
 ### News Article
 ```
-GET /v1/news/{id}
+POST /api/data
 ```
-Returns: single article with title, content, published_utc.
+SQL: `SELECT * FROM news WHERE id = $1`
 
 ---
 

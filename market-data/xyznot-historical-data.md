@@ -1,6 +1,7 @@
 # xyznot Market Data: Historical / Bulk
 
 **MCP Server**: `https://mcp.xyznot.com/v1/mcp`
+**HTTP SQL**: `https://api.rebyte.ai/api/data`
 
 Purpose: Pull **all** historical financial data — full price history, all news articles, complete SEC fundamentals.
 
@@ -11,7 +12,7 @@ Purpose: Pull **all** historical financial data — full price history, all news
 | Layer | URL | Role |
 |-------|-----|------|
 | **MCP** (schema) | `POST https://mcp.xyznot.com/v1/mcp` | Discover schema: `list_datasets`, `table_schema` |
-| **HTTP SQL** (data) | `POST https://mcp.xyznot.com/v1/sql` | Run SQL against full datasets (20B+ rows) |
+| **HTTP SQL** (data) | `POST https://api.rebyte.ai/api/data` | Run SQL against full datasets (20B+ rows) |
 
 Auth: `X-API-Key: a5ff6f5f752c1f04948ba3ce27119ad4202c41f1d52120698ec045b8d25f206e`
 
@@ -83,7 +84,7 @@ Response is SSE. Extract `data: {"jsonrpc":...}` lines. `result.content[0].text`
 ## HTTP SQL
 
 ```bash
-curl -s --max-time 60 -X POST https://mcp.xyznot.com/v1/sql \
+curl -s --max-time 60 -X POST https://api.rebyte.ai/api/data \
   -H "Content-Type: text/plain" -H "Accept: application/json" \
   -H "X-API-Key: $KEY" \
   --data "SELECT ticker, t, c, v FROM bars_1m ORDER BY t DESC LIMIT 10"

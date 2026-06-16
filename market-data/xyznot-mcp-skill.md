@@ -1,5 +1,7 @@
 # xyznot Financial Data Skill
 
+**MCP Server**: `https://mcp.xyznot.com/v1/mcp`
+
 This skill provides two separate interfaces for financial data access.
 
 ---
@@ -7,14 +9,48 @@ This skill provides two separate interfaces for financial data access.
 ## Use Case 1: Historical / Bulk Data
 
 **Purpose**: Pull **all** historical data — full price history, all news articles, complete fundamentals.
-**Endpoints**: MCP for schema discovery, HTTP SQL for queries.
+
+**MCP Server URL**: `https://mcp.xyznot.com/v1/mcp` (Streamable HTTP SSE)
 
 | Interface | URL | Role |
 |-----------|-----|------|
-| **MCP** | `POST /v1/mcp` | Discover schema: `list_datasets`, `table_schema` |
-| **HTTP SQL** | `POST /v1/sql` | Run SQL against full datasets (20B+ rows) |
+| **MCP** | `POST https://mcp.xyznot.com/v1/mcp` | Discover schema: `list_datasets`, `table_schema` |
+| **HTTP SQL** | `POST https://mcp.xyznot.com/v1/sql` | Run SQL against full datasets (20B+ rows) |
 
 **Auth**: `X-API-Key: a5ff6f5f752c1f04948ba3ce27119ad4202c41f1d52120698ec045b8d25f206e`
+
+### MCP Client Configuration
+
+**Claude Code**:
+```bash
+claude mcp add --transport http xyznot-financial \
+  https://mcp.xyznot.com/v1/mcp \
+  --header "X-API-Key: a5ff6f5f752c1f04948ba3ce27119ad4202c41f1d52120698ec045b8d25f206e"
+```
+
+**Cursor** (`.cursor/mcp.json`):
+```json
+{
+  "mcpServers": {
+    "xyznot-financial": {
+      "url": "https://mcp.xyznot.com/v1/mcp",
+      "headers": { "X-API-Key": "a5ff6f5f752c1f04948ba3ce27119ad4202c41f1d52120698ec045b8d25f206e" }
+    }
+  }
+}
+```
+
+**Claude Desktop** (`claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "xyznot-financial": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://mcp.xyznot.com/v1/mcp", "--header", "X-API-Key: a5ff6f5f752c1f04948ba3ce27119ad4202c41f1d52120698ec045b8d25f206e"]
+    }
+  }
+}
+```
 
 ### Datasets
 
